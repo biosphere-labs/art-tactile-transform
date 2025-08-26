@@ -3,16 +3,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 from stl import mesh
 from dotenv import load_dotenv
-
-# Optional import of Hugging Face transformers. If it (or torch/timm) is not available
-# or fails to import (e.g., due to CUDA/PyTorch build issues like _has_magma), we
-# gracefully disable HF depth features by setting hf_pipeline to None.
-hf_pipeline = None
-try:
-    from transformers import pipeline as _hf_pipeline
-    hf_pipeline = _hf_pipeline
-except Exception:
-    hf_pipeline = None
+from transformers import pipeline as hf_pipeline
 
 def bool_from_env(val: str, default: bool = False) -> bool:
     if val is None:
