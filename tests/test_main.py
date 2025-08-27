@@ -1,6 +1,7 @@
 import os
 import sys
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
 import pytest
@@ -9,6 +10,8 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 import main  # noqa: E402
+
+TEST_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 class DummyResponse:
@@ -20,10 +23,10 @@ class DummyResponse:
 
 
 def test_generate_3d(tmp_path, monkeypatch):
-    # Create a simple input image
-    input_img = Image.new('RGB', (2, 2), color='white')
-    input_path = tmp_path / 'input.png'
-    input_img.save(input_path)
+    input_path = TEST_DATA_DIR / "sample.png"
+    TEST_DATA_DIR.mkdir(exist_ok=True)
+    if not input_path.exists():
+        Image.new('RGB', (2, 2), color='white').save(input_path)
 
     # Create fake depth map bytes
     depth_img = Image.new('L', (2, 2), color=128)
