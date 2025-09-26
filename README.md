@@ -8,19 +8,19 @@ This project transforms flat images into 3D printable tactile representations us
 - **Advanced Image Processing**: Gaussian blur, clamping, border addition, and height inversion
 - **Physical Scaling**: Configurable dimensions in millimeters for real-world 3D printing
 - **Enhanced STL Generation**: Proper surface normals, base plates, and physical scaling
-- **Poetry Project**: Modern Python packaging with dependency management
+- **UV Package Management**: Modern Python packaging with UV dependency resolution
 
 ## Requirements
 
 - **Python 3.13** or later
-- **Poetry** for dependency management
+- **UV** for dependency management
 
 ## Installation
 
-### Step 1 – Install Python and Poetry
+### Step 1 – Install Python and UV
 
 1. Visit <https://www.python.org/downloads/> and install **Python 3.13+**
-2. Install Poetry: `pip install poetry` or follow [Poetry installation guide](https://python-poetry.org/docs/#installation)
+2. Install UV: `pip install uv` or follow [UV installation guide](https://docs.astral.sh/uv/getting-started/installation/)
 
 ### Step 2 – Get the project files
 
@@ -32,7 +32,7 @@ cd art-tactile-transform
 ### Step 3 – Install dependencies
 
 ```bash
-poetry install
+uv sync --dev
 ```
 
 ### Step 4 – Configure the program
@@ -64,12 +64,12 @@ Edit the `.env` file and configure:
 
 ### Command Line
 ```bash
-poetry run art-tactile-transform
+uv run art-tactile-transform
 ```
 
 ### Python Script
 ```bash
-poetry run python -m art_tactile_transform.main
+uv run python -m art_tactile_transform.main
 ```
 
 ### As Library
@@ -82,19 +82,19 @@ output_file = generate_3d()
 
 ### Run Tests
 ```bash
-poetry run pytest
+uv run pytest
 ```
 
 ### Code Quality
 ```bash
-poetry run black .
-poetry run ruff check .
-poetry run mypy .
+uv run black .
+uv run ruff check .
+uv run mypy .
 ```
 
 ### Install for Development
 ```bash
-poetry install --with dev
+uv sync --dev
 ```
 
 ## Example Configuration
@@ -120,7 +120,7 @@ GAUSSIAN_BLUR_RADIUS=2
 
 ## Troubleshooting
 
-- **Missing dependencies**: Run `poetry install`
+- **Missing dependencies**: Run `uv sync --dev`
 - **API errors**: Check `HF_API_TOKEN` and network connection
 - **File not found**: Verify `IMAGE_PATH` exists
 - **STL issues**: Check output directory permissions

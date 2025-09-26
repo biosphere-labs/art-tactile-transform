@@ -211,3 +211,4 @@ __marimo__/
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/vcs.xml
 *.egg-info
+/.idea/uv.xml
