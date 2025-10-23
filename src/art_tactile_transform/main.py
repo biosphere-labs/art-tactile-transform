@@ -1,16 +1,142 @@
+import argparse
 import os
 import sys
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import requests
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from PIL import Image, ImageFilter
 from scipy.ndimage import gaussian_filter
 
+try:
+    from colorama import Fore, Style, init as colorama_init
+except ImportError:  # pragma: no cover - fallback when colorama isn't installed
+    class _FallbackFore:
+        CYAN = "\033[36m"
+        GREEN = "\033[32m"
+        RED = "\033[31m"
+        YELLOW = "\033[33m"
+
+    class _FallbackStyle:
+        RESET_ALL = "\033[0m"
+
+    def colorama_init(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    Fore = _FallbackFore()  # type: ignore[assignment]
+    Style = _FallbackStyle()  # type: ignore[assignment]
+
+
 API_URL = "https://api-inference.huggingface.co/models/{model_name}"
+
+
+@dataclass
+class EnvSetting:
+    """Metadata describing an environment variable used by the CLI."""
+
+    key: str
+    description: str
+    required: bool = False
+    default: Optional[str] = None
+
+
+ENV_SETTINGS: list[EnvSetting] = [
+    EnvSetting("MODEL_NAME", "Hugging Face model name", required=True),
+    EnvSetting("IMAGE_PATH", "Path to the input image", required=True),
+    EnvSetting("OUTPUT_PATH", "Output STL file path", required=True),
+    EnvSetting("RESOLUTION", "Output resolution (pixels)", default="64"),
+    EnvSetting("HF_API_TOKEN", "Hugging Face API token (optional)", default=""),
+    EnvSetting("MIN_HEIGHT_MM", "Minimum height in millimetres", default="0.2"),
+    EnvSetting("MAX_HEIGHT_MM", "Maximum height in millimetres", default="2.0"),
+    EnvSetting("BASE_THICKNESS_MM", "Base thickness in millimetres", default="1.0"),
+    EnvSetting("PIXEL_SCALE_MM", "Pixel scale in millimetres", default="0.2"),
+    EnvSetting("INVERT_HEIGHTS", "Invert heights? (true/false)", default="false"),
+    EnvSetting("GAUSSIAN_BLUR_RADIUS", "Gaussian blur radius", default="0"),
+    EnvSetting("CLAMP_MIN", "Clamp minimum value", default="0"),
+    EnvSetting("CLAMP_MAX", "Clamp maximum value", default="255"),
+    EnvSetting("BORDER_PIXELS", "Border pixels to pad", default="0"),
+]
+
+
+def _resolve_default(setting: EnvSetting, defaults: dict[str, str]) -> tuple[Optional[str], Optional[str]]:
+    """Return the default to apply and the value to display to the user."""
+
+    raw_default = defaults.get(setting.key)
+    if raw_default in (None, ""):
+        raw_default = os.environ.get(setting.key)
+    if raw_default is None:
+        raw_default = setting.default
+
+    apply_default = raw_default
+    if setting.required and (apply_default is None or apply_default == ""):
+        apply_default = None
+
+    display_default = raw_default if raw_default not in (None, "") else None
+    return apply_default, display_default
+
+
+def prompt_for_env_values(
+    env_file: str | Path = ".env",
+    input_func: Callable[[str], str] | None = None,
+) -> dict[str, str]:
+    """Interactively ask the user for environment values and set them."""
+
+    defaults = dotenv_values(env_file)
+    colorama_init(autoreset=True)
+
+    input_func = input if input_func is None else input_func
+    results: dict[str, str] = {}
+
+    for setting in ENV_SETTINGS:
+        apply_default, display_default = _resolve_default(setting, defaults)
+
+        while True:
+            prompt = f"{Fore.CYAN}{setting.description} ({setting.key})"
+            if display_default is not None:
+                prompt += f" [{display_default}]"
+            prompt += f": {Style.RESET_ALL}"
+
+            response = input_func(prompt).strip()
+
+            if not response:
+                if apply_default is not None:
+                    value = apply_default
+                elif setting.required:
+                    print(
+                        f"{Fore.RED}A value is required for {setting.key}.{Style.RESET_ALL}"
+                    )
+                    continue
+                else:
+                    value = ""
+            else:
+                value = response
+
+            results[setting.key] = value
+            os.environ[setting.key] = value
+            break
+
+    return results
+
+
+def interactive_cli(
+    env_file: str | Path = ".env",
+    input_func: Callable[[str], str] | None = None,
+) -> str:
+    """Run the interactive CLI to collect environment variables and generate output."""
+
+    colorama_init(autoreset=True)
+    print(f"{Fore.GREEN}Art Tactile Transform interactive setup{Style.RESET_ALL}")
+
+    prompt_for_env_values(env_file=env_file, input_func=input_func)
+
+    print(f"{Fore.YELLOW}Generating tactile model…{Style.RESET_ALL}")
+    result = generate_3d(env_file=env_file)
+    print(f"{Fore.GREEN}✓ Generated tactile model: {result}{Style.RESET_ALL}")
+    return result
 
 
 def query_hf_api(image_bytes: bytes, model_name: str, api_token: Optional[str] = None) -> bytes:
@@ -27,6 +153,8 @@ def query_hf_api(image_bytes: bytes, model_name: str, api_token: Optional[str] =
         response.raise_for_status()
         return response.content
     except requests.RequestException as e:
+        raise RuntimeError(f"Failed to query Hugging Face API: {e}") from e
+    except Exception as e:  # pragma: no cover - safety net for unexpected errors
         raise RuntimeError(f"Failed to query Hugging Face API: {e}") from e
 
 
@@ -152,10 +280,13 @@ def process_image(image: Image.Image, gaussian_blur_radius: int = 0,
     return Image.fromarray((img_array * 255).astype(np.uint8), mode='L')
 
 
-def generate_3d() -> str:
+def generate_3d(env_file: str | Path | None = None) -> str:
     """Load image, query model, and generate STL file."""
     # Load environment variables
-    load_dotenv()
+    if env_file is not None:
+        load_dotenv(env_file)
+    else:
+        load_dotenv()
 
     # Required parameters
     model_name = os.getenv("MODEL_NAME")
@@ -223,11 +354,31 @@ def generate_3d() -> str:
         raise RuntimeError(f"Failed to generate 3D model: {e}") from e
 
 
-def main() -> None:
+def main(argv: Optional[list[str]] = None) -> None:
     """CLI entry point."""
+
+    parser = argparse.ArgumentParser(
+        description="Generate tactile STL models from flat images"
+    )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Launch an interactive prompt to configure environment settings.",
+    )
+    parser.add_argument(
+        "--env-file",
+        default=".env",
+        help="Path to a .env file providing default configuration values.",
+    )
+    args = parser.parse_args(argv)
+
     try:
-        output_file = generate_3d()
-        print(f"Generated: {output_file}")
+        if args.interactive:
+            interactive_cli(env_file=args.env_file)
+        else:
+            output_file = generate_3d(env_file=args.env_file)
+            print(f"Generated: {output_file}")
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
