@@ -8,9 +8,11 @@ import pytest
 from PIL import Image
 
 from art_tactile_transform.main import (
+    ENV_SETTINGS,
     calculate_normals,
     generate_3d,
     heightmap_to_stl,
+    interactive_cli,
     process_image,
     query_hf_api,
 )
@@ -103,8 +105,11 @@ def test_generate_3d_missing_env(tmp_path, monkeypatch):
     for var in ['MODEL_NAME', 'IMAGE_PATH', 'OUTPUT_PATH']:
         monkeypatch.delenv(var, raising=False)
 
+    empty_env = tmp_path / '.env'
+    empty_env.write_text("")
+
     with pytest.raises(ValueError, match="MODEL_NAME, IMAGE_PATH and OUTPUT_PATH must be set"):
-        generate_3d()
+        generate_3d(env_file=str(empty_env))
 
 
 def test_generate_3d_missing_file(tmp_path, monkeypatch):
@@ -153,3 +158,91 @@ def test_generate_3d_full_pipeline(tmp_path, monkeypatch):
     content = output_path.read_text()
     assert 'solid tactile_model' in content
     assert 'endsolid tactile_model' in content
+
+
+def test_interactive_cli_uses_env_defaults(tmp_path, monkeypatch):
+    """Interactive CLI should leverage .env defaults when input is blank."""
+
+    for setting in ENV_SETTINGS:
+        monkeypatch.delenv(setting.key, raising=False)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "MODEL_NAME=default-model",
+                f"IMAGE_PATH={tmp_path / 'input.png'}",
+                f"OUTPUT_PATH={tmp_path / 'output.stl'}",
+                "RESOLUTION=64",
+                "MIN_HEIGHT_MM=0.2",
+                "MAX_HEIGHT_MM=2.0",
+            ]
+        )
+    )
+
+    responses = iter(["", "", "", "128"] + [""] * (len(ENV_SETTINGS) - 4))
+
+    def fake_input(_prompt: str) -> str:
+        return next(responses)
+
+    captured: dict[str, str] = {}
+
+    def fake_generate(env_file=None):  # type: ignore[override]
+        captured.update({
+            key: os.environ.get(key, "")
+            for key in ("MODEL_NAME", "RESOLUTION", "OUTPUT_PATH")
+        })
+        return "generated.stl"
+
+    monkeypatch.setattr('builtins.input', fake_input)
+    monkeypatch.setattr('art_tactile_transform.main.generate_3d', fake_generate)
+
+    result = interactive_cli(env_file=str(env_file))
+
+    assert result == "generated.stl"
+    assert captured["MODEL_NAME"] == "default-model"
+    assert captured["RESOLUTION"] == "128"
+
+    for setting in ENV_SETTINGS:
+        monkeypatch.delenv(setting.key, raising=False)
+
+
+def test_interactive_cli_requires_values_without_defaults(tmp_path, monkeypatch):
+    """Interactive CLI should re-prompt when a required default is missing."""
+
+    for setting in ENV_SETTINGS:
+        monkeypatch.delenv(setting.key, raising=False)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+
+    responses = iter(
+        [
+            "",  # Initial blank for MODEL_NAME -> triggers re-prompt
+            "cli-model",
+            str(tmp_path / "input.png"),
+            str(tmp_path / "output.stl"),
+        ]
+        + [""] * (len(ENV_SETTINGS) - 3)
+    )
+
+    def fake_input(_prompt: str) -> str:
+        return next(responses)
+
+    called_with: dict[str, object] = {}
+
+    def fake_generate(env_file=None):  # type: ignore[override]
+        called_with["env_file"] = env_file
+        return "result.stl"
+
+    monkeypatch.setattr('builtins.input', fake_input)
+    monkeypatch.setattr('art_tactile_transform.main.generate_3d', fake_generate)
+
+    result = interactive_cli(env_file=str(env_file))
+
+    assert result == "result.stl"
+    assert os.environ["MODEL_NAME"] == "cli-model"
+    assert called_with["env_file"] == str(env_file)
+
+    for setting in ENV_SETTINGS:
+        monkeypatch.delenv(setting.key, raising=False)
