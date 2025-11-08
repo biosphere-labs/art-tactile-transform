@@ -1,28 +1,23 @@
 # Art Tactile Transform
 
-Transform flat images into 3D printable tactile representations using AI depth estimation. Generate properly scaled STL files for accessibility, education, and artistic expression.
-
-## Version 2.0 - Restructured Architecture
-
-This version introduces a modular architecture designed to support GUI development while maintaining full backwards compatibility with the CLI interface.
+This project transforms flat images into 3D printable tactile representations designed for blind and visually impaired users. Unlike traditional depth estimation, it uses semantic height mapping where faces and important features are RAISED and backgrounds are LOWERED - optimized for touch perception.
 
 ## Features
 
-### Current (v2.0)
-- **AI-Powered Depth Estimation**: Uses Hugging Face transformers (e.g., Intel/dpt-large)
-- **Advanced Image Processing**: Blur, clamping, borders, height inversion
-- **Physical Scaling**: Real-world dimensions in millimeters
-- **Enhanced STL Generation**: Proper normals, base plates, validation
-- **Modular Architecture**: Separate core, processing, and utility modules
-- **Parameter System**: Type-safe parameter classes with validation
-- **Preset System**: Built-in presets for common use cases
-- **Dual Entry Points**: CLI and GUI interfaces
+### Phase 1 MVP - Gradio GUI (NEW!)
+- **Interactive Web Interface**: Easy-to-use Gradio-based GUI with real-time 3D preview
+- **Portrait Mode Processing**: Face detection with semantic emphasis (faces HIGH, background LOW)
+- **Adjustable Parameters**: Fine-tune subject emphasis, background suppression, feature sharpness, and edge strength
+- **3D Preview**: Interactive orbit controls to inspect model before export
+- **Instant STL Export**: Download ready-to-print files directly from browser
 
-### Coming Soon (v2.1+)
-- **Interactive GUI**: Real-time parameter adjustment with 3D preview
-- **Multiple Processing Modes**: Portrait, landscape, text, diagram modes
-- **Semantic Height Mapping**: Subject-aware height assignment
-- **Batch Processing**: Process multiple images efficiently
+### Core Features
+- **Semantic Height Mapping**: Height represents importance, not photographic depth
+- **Face Detection**: OpenCV Haar Cascades for robust face and feature detection
+- **Edge Enhancement**: Emphasize facial features and boundaries for tactile clarity
+- **Physical Scaling**: Configurable dimensions in millimeters for real-world 3D printing
+- **Enhanced STL Generation**: Proper surface normals, base plates, and physical scaling
+- **UV Package Management**: Modern Python packaging with UV dependency resolution
 
 ## Requirements
 
@@ -76,88 +71,61 @@ Edit the `.env` file and configure:
 
 ## Usage
 
-### Command Line Interface
+### GUI Mode (Recommended for Phase 1 MVP)
+
+Launch the interactive Gradio interface:
 
 ```bash
-# Using the CLI command
-uv run art-tactile-cli
-
-# Or the backwards-compatible command
-uv run art-tactile-transform
-```
-
-### GUI Interface (Coming Soon)
-
-```bash
-# Launch the GUI (Phase 1 implementation in progress)
 uv run art-tactile-gui
 ```
 
-### Python API - Basic Usage
+This will start a web server at `http://localhost:7860` with:
+- **Image upload**: Drag and drop portrait images
+- **Real-time parameter adjustment**: Sliders for all processing parameters
+- **3D preview**: Interactive orbit controls to inspect the model
+- **STL export**: Download button for 3D printing
 
-```python
-# Backwards compatible - works exactly as before
-from art_tactile_transform import generate_3d
+#### GUI Parameters:
 
-output_file = generate_3d()
-print(f"Generated: {output_file}")
+**Physical Parameters:**
+- Width (mm): 50-300, default 150
+- Relief Depth (mm): 0.5-10, default 3
+- Base Thickness (mm): 0.5-5, default 2
+
+**Processing Parameters:**
+- Smoothing: 0-10, default 2
+- Resolution: 64-256 vertices, default 128
+
+**Semantic Parameters (Portrait Mode):**
+- Subject Emphasis (%): 0-200, default 120 (how much to raise faces)
+- Background Suppression (%): 0-100, default 40 (how much to flatten background)
+- Feature Sharpness (%): 0-100, default 70 (emphasis on eyes, nose, mouth)
+- Edge Strength (%): 0-100, default 60 (edge detection intensity)
+
+### Command Line (Original)
+
+For depth estimation mode (legacy):
+```bash
+uv run art-tactile-transform
 ```
 
-### Python API - New Modular Approach
-
+### As Library
 ```python
-from art_tactile_transform import (
-    load_image,
-    process_image,
-    resize_to_resolution,
-    image_to_heightmap,
-    heightmap_to_stl,
-)
+from art_tactile_transform.gui import create_semantic_heightmap, process_portrait_to_stl
+import cv2
 
-# Load and process image
-image = load_image('input.jpg')
-processed = process_image(image, gaussian_blur_radius=2)
-resized = resize_to_resolution(processed, 128)
-heightmap = image_to_heightmap(resized)
+# Load image
+image = cv2.imread("portrait.jpg")
 
-# Generate STL
-heightmap_to_stl(
-    heightmap,
-    'output.stl',
-    min_height_mm=0.5,
-    max_height_mm=3.0,
-    base_thickness_mm=2.0,
-    pixel_scale_mm=0.2
+# Process with semantic heightmap
+stl_path, preview = process_portrait_to_stl(
+    image,
+    width_mm=150,
+    relief_depth_mm=3,
+    subject_emphasis=120,
+    background_suppression=40
 )
 ```
-
-### Using Presets
-
-```python
-from art_tactile_transform.models.presets import (
-    get_builtin_preset,
-    list_builtin_presets
-)
-
-# List available presets
-presets = list_builtin_presets()
-for preset in presets:
-    print(f"{preset['name']}: {preset['description']}")
-
-# Load a preset
-params = get_builtin_preset('portrait_high_detail')
-print(f"Resolution: {params.processing.resolution}")
-print(f"Width: {params.physical.width_mm}mm")
-```
-
-### Available Built-in Presets
-
-- **Portrait - High Detail**: Fine facial features with strong detail emphasis
-- **Portrait - Simple**: Basic face shape with gentle features
-- **Landscape - Dramatic**: Strong foreground/background contrast
-- **Text - Maximum Legibility**: Very sharp, high relief for text
-- **Diagram - Technical**: Sharp edges and flat regions
-- **Art - Impressionist**: Soft, flowing features for artistic works
 
 ## Development
 
@@ -192,69 +160,30 @@ PIXEL_SCALE_MM=0.15
 GAUSSIAN_BLUR_RADIUS=2
 ```
 
+## Key Innovation: Semantic vs. Photographic Depth
+
+**Traditional approach (depth estimation)**: Uses photographic perspective where distant objects appear "far away". For the Mona Lisa, this emphasizes the background landscape over her face.
+
+**Our approach (semantic height mapping)**: Height represents IMPORTANCE for touch:
+- **Faces = RAISED**: Primary subjects are elevated for tactile recognition
+- **Features = HIGHEST**: Eyes, nose, mouth emphasized even more
+- **Background = LOWERED**: Irrelevant areas suppressed for clarity
+- **Edges = ENHANCED**: Boundaries sharpened for feature definition
+
+This makes tactile representations actually useful for blind users, who need to feel the subject matter, not photographic depth.
+
 ## STL Output Features
 
 - **Proper Surface Normals**: Correct lighting and 3D printing orientation
 - **Physical Scaling**: Real-world dimensions in millimeters
 - **Base Plate**: Stable foundation for 3D printing
 - **Tactile Height Mapping**: Configurable relief depth for accessibility
-
-## Project Structure
-
-```
-src/art_tactile_transform/
-├── cli.py                    # CLI entry point
-├── gui.py                    # GUI entry point (placeholder)
-├── core/                     # Core processing modules
-│   ├── image_processing.py   # Image preprocessing
-│   ├── mesh_generation.py    # STL generation
-│   └── validation.py         # Mesh validation
-├── processing/               # Processing pipelines
-│   ├── depth_estimation.py   # Depth-based processing
-│   └── semantic_mapping.py   # Semantic-based (future)
-├── models/                   # Parameter management
-│   ├── parameters.py         # Parameter classes
-│   └── presets.py           # Preset system
-└── utils/                    # Utilities
-    ├── file_handling.py      # File operations
-    └── logging.py            # Logging configuration
-```
-
-## Documentation
-
-- **[Architecture Guide](docs/ARCHITECTURE.md)**: Detailed architecture documentation
-- **[Migration Guide](docs/MIGRATION.md)**: Migrating from v1.0 to v2.0
-- **[PRD](docs/prd/tactile-art-gui-v2.md)**: Product roadmap and future features
-- **[Example Config](config/example.env)**: Configuration file example
-
-## Backwards Compatibility
-
-Version 2.0 maintains **full backwards compatibility**:
-- All v1.0 CLI commands work unchanged
-- Same `.env` configuration format
-- Original Python API imports still supported
-- No breaking changes for existing users
-
-See [MIGRATION.md](docs/MIGRATION.md) for details.
+- **Smooth Gradients**: Gaussian filtering for pleasant touch experience
 
 ## Troubleshooting
 
 - **Missing dependencies**: Run `uv sync --dev`
-- **Import errors**: Make sure you're using Python 3.13+
 - **API errors**: Check `HF_API_TOKEN` and network connection
 - **File not found**: Verify `IMAGE_PATH` exists
 - **STL issues**: Check output directory permissions
-
-## Contributing
-
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for development guidelines.
-
-## License
-
-[Add license information]
-
-## Acknowledgments
-
-- Depth estimation models from [Hugging Face Transformers](https://huggingface.co/models)
-- Built with modern Python packaging using [UV](https://docs.astral.sh/uv/)
 

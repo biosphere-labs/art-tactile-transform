@@ -15,6 +15,9 @@ dependencies = [
     "scipy>=1.11.0",
     "torch>=2.0.0",
     "transformers>=4.0.0",
+    "gradio>=4.0.0",
+    "opencv-python>=4.8.0",
+    "scikit-image>=0.21.0",
 ]
 
 [project.optional-dependencies]
