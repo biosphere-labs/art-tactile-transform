@@ -1,14 +1,28 @@
 # Art Tactile Transform
 
-This project transforms flat images into 3D printable tactile representations using AI depth estimation models from Hugging Face. It generates properly scaled STL files with enhanced tactile features for accessibility and 3D printing.
+Transform flat images into 3D printable tactile representations using AI depth estimation. Generate properly scaled STL files for accessibility, education, and artistic expression.
+
+## Version 2.0 - Restructured Architecture
+
+This version introduces a modular architecture designed to support GUI development while maintaining full backwards compatibility with the CLI interface.
 
 ## Features
 
-- **AI-Powered Depth Estimation**: Uses Hugging Face models (e.g., Intel/dpt-large) for accurate depth mapping
-- **Advanced Image Processing**: Gaussian blur, clamping, border addition, and height inversion
-- **Physical Scaling**: Configurable dimensions in millimeters for real-world 3D printing
-- **Enhanced STL Generation**: Proper surface normals, base plates, and physical scaling
-- **UV Package Management**: Modern Python packaging with UV dependency resolution
+### Current (v2.0)
+- **AI-Powered Depth Estimation**: Uses Hugging Face transformers (e.g., Intel/dpt-large)
+- **Advanced Image Processing**: Blur, clamping, borders, height inversion
+- **Physical Scaling**: Real-world dimensions in millimeters
+- **Enhanced STL Generation**: Proper normals, base plates, validation
+- **Modular Architecture**: Separate core, processing, and utility modules
+- **Parameter System**: Type-safe parameter classes with validation
+- **Preset System**: Built-in presets for common use cases
+- **Dual Entry Points**: CLI and GUI interfaces
+
+### Coming Soon (v2.1+)
+- **Interactive GUI**: Real-time parameter adjustment with 3D preview
+- **Multiple Processing Modes**: Portrait, landscape, text, diagram modes
+- **Semantic Height Mapping**: Subject-aware height assignment
+- **Batch Processing**: Process multiple images efficiently
 
 ## Requirements
 
@@ -62,21 +76,88 @@ Edit the `.env` file and configure:
 
 ## Usage
 
-### Command Line
+### Command Line Interface
+
 ```bash
+# Using the CLI command
+uv run art-tactile-cli
+
+# Or the backwards-compatible command
 uv run art-tactile-transform
 ```
 
-### Python Script
+### GUI Interface (Coming Soon)
+
 ```bash
-uv run python -m art_tactile_transform.main
+# Launch the GUI (Phase 1 implementation in progress)
+uv run art-tactile-gui
 ```
 
-### As Library
+### Python API - Basic Usage
+
 ```python
+# Backwards compatible - works exactly as before
 from art_tactile_transform import generate_3d
+
 output_file = generate_3d()
+print(f"Generated: {output_file}")
 ```
+
+### Python API - New Modular Approach
+
+```python
+from art_tactile_transform import (
+    load_image,
+    process_image,
+    resize_to_resolution,
+    image_to_heightmap,
+    heightmap_to_stl,
+)
+
+# Load and process image
+image = load_image('input.jpg')
+processed = process_image(image, gaussian_blur_radius=2)
+resized = resize_to_resolution(processed, 128)
+heightmap = image_to_heightmap(resized)
+
+# Generate STL
+heightmap_to_stl(
+    heightmap,
+    'output.stl',
+    min_height_mm=0.5,
+    max_height_mm=3.0,
+    base_thickness_mm=2.0,
+    pixel_scale_mm=0.2
+)
+```
+
+### Using Presets
+
+```python
+from art_tactile_transform.models.presets import (
+    get_builtin_preset,
+    list_builtin_presets
+)
+
+# List available presets
+presets = list_builtin_presets()
+for preset in presets:
+    print(f"{preset['name']}: {preset['description']}")
+
+# Load a preset
+params = get_builtin_preset('portrait_high_detail')
+print(f"Resolution: {params.processing.resolution}")
+print(f"Width: {params.physical.width_mm}mm")
+```
+
+### Available Built-in Presets
+
+- **Portrait - High Detail**: Fine facial features with strong detail emphasis
+- **Portrait - Simple**: Basic face shape with gentle features
+- **Landscape - Dramatic**: Strong foreground/background contrast
+- **Text - Maximum Legibility**: Very sharp, high relief for text
+- **Diagram - Technical**: Sharp edges and flat regions
+- **Art - Impressionist**: Soft, flowing features for artistic works
 
 ## Development
 
@@ -118,10 +199,62 @@ GAUSSIAN_BLUR_RADIUS=2
 - **Base Plate**: Stable foundation for 3D printing
 - **Tactile Height Mapping**: Configurable relief depth for accessibility
 
+## Project Structure
+
+```
+src/art_tactile_transform/
+├── cli.py                    # CLI entry point
+├── gui.py                    # GUI entry point (placeholder)
+├── core/                     # Core processing modules
+│   ├── image_processing.py   # Image preprocessing
+│   ├── mesh_generation.py    # STL generation
+│   └── validation.py         # Mesh validation
+├── processing/               # Processing pipelines
+│   ├── depth_estimation.py   # Depth-based processing
+│   └── semantic_mapping.py   # Semantic-based (future)
+├── models/                   # Parameter management
+│   ├── parameters.py         # Parameter classes
+│   └── presets.py           # Preset system
+└── utils/                    # Utilities
+    ├── file_handling.py      # File operations
+    └── logging.py            # Logging configuration
+```
+
+## Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)**: Detailed architecture documentation
+- **[Migration Guide](docs/MIGRATION.md)**: Migrating from v1.0 to v2.0
+- **[PRD](docs/prd/tactile-art-gui-v2.md)**: Product roadmap and future features
+- **[Example Config](config/example.env)**: Configuration file example
+
+## Backwards Compatibility
+
+Version 2.0 maintains **full backwards compatibility**:
+- All v1.0 CLI commands work unchanged
+- Same `.env` configuration format
+- Original Python API imports still supported
+- No breaking changes for existing users
+
+See [MIGRATION.md](docs/MIGRATION.md) for details.
+
 ## Troubleshooting
 
 - **Missing dependencies**: Run `uv sync --dev`
+- **Import errors**: Make sure you're using Python 3.13+
 - **API errors**: Check `HF_API_TOKEN` and network connection
 - **File not found**: Verify `IMAGE_PATH` exists
 - **STL issues**: Check output directory permissions
+
+## Contributing
+
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for development guidelines.
+
+## License
+
+[Add license information]
+
+## Acknowledgments
+
+- Depth estimation models from [Hugging Face Transformers](https://huggingface.co/models)
+- Built with modern Python packaging using [UV](https://docs.astral.sh/uv/)
 
