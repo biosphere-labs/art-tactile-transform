@@ -238,10 +238,13 @@ class TestIntegration:
                 if key in os.environ:
                     del os.environ[key]
 
-    def test_pipeline_missing_environment_variables(self, tmp_path, sample_image):
+    def test_pipeline_missing_environment_variables(self, tmp_path, sample_image, monkeypatch):
         """Test pipeline behavior with missing required environment variables."""
         input_path = tmp_path / 'missing_env_input.png'
         sample_image.save(input_path)
+
+        # Mock load_dotenv to prevent loading from .env file
+        monkeypatch.setattr('art_tactile_transform.main.load_dotenv', lambda: None)
 
         # Clear any existing environment variables
         env_vars_to_clear = [
@@ -251,21 +254,12 @@ class TestIntegration:
             'CLAMP_MAX', 'BORDER_PIXELS', 'INVERT_HEIGHTS', 'HF_API_TOKEN'
         ]
 
-        original_values = {}
         for var in env_vars_to_clear:
-            if var in os.environ:
-                original_values[var] = os.environ[var]
-                del os.environ[var]
+            monkeypatch.delenv(var, raising=False)
 
-        try:
-            # Should raise ValueError for missing required variables
-            with pytest.raises(ValueError, match="MODEL_NAME, IMAGE_PATH and OUTPUT_PATH must be set"):
-                generate_3d()
-
-        finally:
-            # Restore original environment variables
-            for var, value in original_values.items():
-                os.environ[var] = value
+        # Should raise ValueError for missing required variables
+        with pytest.raises(ValueError, match="MODEL_NAME, IMAGE_PATH and OUTPUT_PATH must be set"):
+            generate_3d()
 
     def test_pipeline_output_directory_creation(self, tmp_path, sample_image, mock_successful_api_call):
         """Test that the pipeline creates output directories as needed."""
