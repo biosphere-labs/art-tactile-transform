@@ -1,11 +1,20 @@
 # Art Tactile Transform
 
-This project transforms flat images into 3D printable tactile representations using AI depth estimation models from Hugging Face. It generates properly scaled STL files with enhanced tactile features for accessibility and 3D printing.
+This project transforms flat images into 3D printable tactile representations designed for blind and visually impaired users. Unlike traditional depth estimation, it uses semantic height mapping where faces and important features are RAISED and backgrounds are LOWERED - optimized for touch perception.
 
 ## Features
 
-- **AI-Powered Depth Estimation**: Uses Hugging Face models (e.g., Intel/dpt-large) for accurate depth mapping
-- **Advanced Image Processing**: Gaussian blur, clamping, border addition, and height inversion
+### Phase 1 MVP - Gradio GUI (NEW!)
+- **Interactive Web Interface**: Easy-to-use Gradio-based GUI with real-time 3D preview
+- **Portrait Mode Processing**: Face detection with semantic emphasis (faces HIGH, background LOW)
+- **Adjustable Parameters**: Fine-tune subject emphasis, background suppression, feature sharpness, and edge strength
+- **3D Preview**: Interactive orbit controls to inspect model before export
+- **Instant STL Export**: Download ready-to-print files directly from browser
+
+### Core Features
+- **Semantic Height Mapping**: Height represents importance, not photographic depth
+- **Face Detection**: OpenCV Haar Cascades for robust face and feature detection
+- **Edge Enhancement**: Emphasize facial features and boundaries for tactile clarity
 - **Physical Scaling**: Configurable dimensions in millimeters for real-world 3D printing
 - **Enhanced STL Generation**: Proper surface normals, base plates, and physical scaling
 - **UV Package Management**: Modern Python packaging with UV dependency resolution
@@ -62,20 +71,60 @@ Edit the `.env` file and configure:
 
 ## Usage
 
-### Command Line
+### GUI Mode (Recommended for Phase 1 MVP)
+
+Launch the interactive Gradio interface:
+
+```bash
+uv run art-tactile-gui
+```
+
+This will start a web server at `http://localhost:7860` with:
+- **Image upload**: Drag and drop portrait images
+- **Real-time parameter adjustment**: Sliders for all processing parameters
+- **3D preview**: Interactive orbit controls to inspect the model
+- **STL export**: Download button for 3D printing
+
+#### GUI Parameters:
+
+**Physical Parameters:**
+- Width (mm): 50-300, default 150
+- Relief Depth (mm): 0.5-10, default 3
+- Base Thickness (mm): 0.5-5, default 2
+
+**Processing Parameters:**
+- Smoothing: 0-10, default 2
+- Resolution: 64-256 vertices, default 128
+
+**Semantic Parameters (Portrait Mode):**
+- Subject Emphasis (%): 0-200, default 120 (how much to raise faces)
+- Background Suppression (%): 0-100, default 40 (how much to flatten background)
+- Feature Sharpness (%): 0-100, default 70 (emphasis on eyes, nose, mouth)
+- Edge Strength (%): 0-100, default 60 (edge detection intensity)
+
+### Command Line (Original)
+
+For depth estimation mode (legacy):
 ```bash
 uv run art-tactile-transform
 ```
 
-### Python Script
-```bash
-uv run python -m art_tactile_transform.main
-```
-
 ### As Library
 ```python
-from art_tactile_transform import generate_3d
-output_file = generate_3d()
+from art_tactile_transform.gui import create_semantic_heightmap, process_portrait_to_stl
+import cv2
+
+# Load image
+image = cv2.imread("portrait.jpg")
+
+# Process with semantic heightmap
+stl_path, preview = process_portrait_to_stl(
+    image,
+    width_mm=150,
+    relief_depth_mm=3,
+    subject_emphasis=120,
+    background_suppression=40
+)
 ```
 
 ## Development
@@ -111,12 +160,25 @@ PIXEL_SCALE_MM=0.15
 GAUSSIAN_BLUR_RADIUS=2
 ```
 
+## Key Innovation: Semantic vs. Photographic Depth
+
+**Traditional approach (depth estimation)**: Uses photographic perspective where distant objects appear "far away". For the Mona Lisa, this emphasizes the background landscape over her face.
+
+**Our approach (semantic height mapping)**: Height represents IMPORTANCE for touch:
+- **Faces = RAISED**: Primary subjects are elevated for tactile recognition
+- **Features = HIGHEST**: Eyes, nose, mouth emphasized even more
+- **Background = LOWERED**: Irrelevant areas suppressed for clarity
+- **Edges = ENHANCED**: Boundaries sharpened for feature definition
+
+This makes tactile representations actually useful for blind users, who need to feel the subject matter, not photographic depth.
+
 ## STL Output Features
 
 - **Proper Surface Normals**: Correct lighting and 3D printing orientation
 - **Physical Scaling**: Real-world dimensions in millimeters
 - **Base Plate**: Stable foundation for 3D printing
 - **Tactile Height Mapping**: Configurable relief depth for accessibility
+- **Smooth Gradients**: Gaussian filtering for pleasant touch experience
 
 ## Troubleshooting
 
