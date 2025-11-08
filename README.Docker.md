@@ -2,13 +2,36 @@
 
 Transform images into 3D printable tactile art for blind users - now available as a Docker container!
 
-## One-Line Deployment
+## 🚀 Fastest Start (Auto-Opens Browser!)
+
+### Linux/macOS
+```bash
+./launch.sh
+```
+
+### Windows (PowerShell)
+```powershell
+.\launch.ps1
+```
+
+### Windows (Command Prompt)
+```cmd
+launch.bat
+```
+
+**What it does**: Starts container + opens browser automatically!
+
+See [LAUNCHER.md](LAUNCHER.md) for details.
+
+---
+
+## One-Line Manual Deployment
 
 ```bash
 docker run -d -p 7860:7860 fluidnotions/art-tactile-transform:latest
 ```
 
-Open browser to: **http://localhost:7860**
+Then open browser to: **http://localhost:7860**
 
 ---
 
