@@ -233,6 +233,9 @@ def test_query_hf_api_with_headers(monkeypatch, mock_hf_api_response):
 @pytest.mark.requires_env
 def test_generate_3d_missing_env(monkeypatch):
     """Test generate_3d with missing environment variables."""
+    # Mock load_dotenv to prevent loading from .env file
+    monkeypatch.setattr('art_tactile_transform.main.load_dotenv', lambda: None)
+
     # Clear all environment variables
     for var in ['MODEL_NAME', 'IMAGE_PATH', 'OUTPUT_PATH']:
         monkeypatch.delenv(var, raising=False)

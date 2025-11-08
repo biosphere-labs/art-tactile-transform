@@ -5,29 +5,27 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import requests
 from dotenv import load_dotenv
 from PIL import Image, ImageFilter
-from scipy.ndimage import gaussian_filter
-
-API_URL = "https://api-inference.huggingface.co/models/{model_name}"
+from transformers import pipeline
 
 
-def query_hf_api(image_bytes: bytes, model_name: str, api_token: Optional[str] = None) -> bytes:
-    """Send image bytes to the Hugging Face inference API and return depth map bytes."""
-    headers = {"Authorization": f"Bearer {api_token}"} if api_token else {}
-
+def query_depth_model(image: Image.Image, model_name: str) -> Image.Image:
+    """Use transformers pipeline for local depth estimation."""
     try:
-        response = requests.post(
-            API_URL.format(model_name=model_name),
-            headers=headers,
-            data=image_bytes,
-            timeout=30
-        )
-        response.raise_for_status()
-        return response.content
-    except requests.RequestException as e:
-        raise RuntimeError(f"Failed to query Hugging Face API: {e}") from e
+        # Initialize depth estimation pipeline
+        print(f"Loading depth model: {model_name}")
+        depth_estimator = pipeline("depth-estimation", model=model_name)
+
+        # Run inference
+        result = depth_estimator(image)
+
+        # Extract depth map from result
+        depth_map = result["depth"]
+
+        return depth_map
+    except Exception as e:
+        raise RuntimeError(f"Failed to run depth estimation: {e}") from e
 
 
 def calculate_normals(z00: float, z10: float, z01: float, z11: float,
@@ -58,6 +56,9 @@ def heightmap_to_stl(heightmap: np.ndarray, output_path: str,
     # Normalize heightmap to physical dimensions
     normalized_heights = (heightmap * (max_height_mm - min_height_mm) +
                          min_height_mm + base_thickness_mm)
+
+    # Create output directory if needed
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("solid tactile_model\n")
@@ -155,7 +156,7 @@ def process_image(image: Image.Image, gaussian_blur_radius: int = 0,
 def generate_3d() -> str:
     """Load image, query model, and generate STL file."""
     # Load environment variables
-    load_dotenv()
+    load_dotenv(override=True)
 
     # Required parameters
     model_name = os.getenv("MODEL_NAME")
@@ -188,16 +189,14 @@ def generate_3d() -> str:
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Load and preprocess image
-        with open(image_path, "rb") as img_file:
-            image_bytes = img_file.read()
+        # Load input image
+        input_image = Image.open(image_path)
 
-        # Query depth estimation model
-        print(f"Querying depth model: {model_name}")
-        depth_bytes = query_hf_api(image_bytes, model_name, api_token)
+        # Run depth estimation with local model
+        print(f"Running depth estimation with: {model_name}")
+        depth_image = query_depth_model(input_image, model_name)
 
         # Process depth map
-        depth_image = Image.open(BytesIO(depth_bytes))
         processed_image = process_image(
             depth_image, gaussian_blur_radius, clamp_min, clamp_max,
             border_pixels, invert_heights
