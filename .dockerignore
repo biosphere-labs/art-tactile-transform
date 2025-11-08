@@ -1,0 +1,84 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist/
+build/
+*.egg
+.venv
+venv/
+ENV/
+env/
+
+# UV
+.uv/
+uv.lock
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (keep only README.md)
+docs/
+*.md
+!README.md
+
+# Tests
+tests/
+*.test.py
+
+# Development files
+.env
+.env.*
+config/
+
+# Build artifacts
+*.stl
+*.obj
+*.ply
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Proof of concept
+tests/proof_of_functionality/
+
+# Worktrees
+phase1-mvp-gradio/
+project-restructure/
+semantic-algorithms/
+ui-mockups/
+
+# Implementation docs (not needed in container)
+IMPLEMENTATION_SUMMARY.md
+TASK_COMPLETION_REPORT.md
+verify_implementation.py
