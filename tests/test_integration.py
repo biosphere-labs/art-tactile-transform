@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from art_tactile_transform.main import generate_3d
+from art_tactile_transform.cli import generate_3d
 
 
 @pytest.mark.integration
