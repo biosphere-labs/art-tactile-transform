@@ -34,7 +34,7 @@ if %errorlevel% neq 0 (
     echo What's being downloaded:
     echo   - PyTorch CPU (~1.5GB) - Deep learning framework
     echo   - Transformers (~200MB) - AI model library
-    echo   - Depth model (~500MB) - Downloaded automatically on first use
+    echo   - Depth model (~1.3GB) - Downloaded automatically on first use
     echo.
     pause
     echo.
