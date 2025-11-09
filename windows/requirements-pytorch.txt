@@ -1,0 +1,14 @@
+# Art Tactile Transform - PyTorch & AI Dependencies (Windows)
+# These are downloaded on first run (~2GB total)
+
+# PyTorch (CPU version for Windows - smaller and faster download)
+# Use CPU version to avoid CUDA complexity on user machines
+--index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+torchvision>=0.15.0
+
+# HuggingFace transformers for depth estimation
+transformers>=4.0.0
+
+# Note: This will download ~1.5GB for PyTorch and ~200MB for transformers
+# The depth estimation model (~500MB) is downloaded automatically on first use
