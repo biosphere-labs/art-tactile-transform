@@ -133,7 +133,7 @@ TROUBLESHOOTING
   → Check Windows Firewall isn't blocking Python
 
 "AI model download slow":
-  → First run downloads ~500MB depth model
+  → First run downloads ~1.3GB depth model
   → Can take 5-10 minutes on slow connections
   → Subsequent runs use cached model (instant)
 
@@ -155,7 +155,7 @@ FIRST RUN PROCESS
 3. If not: Downloads PyTorch (~1.5GB)
 4. Downloads transformers library (~200MB)
 5. Launches GUI
-6. On first image processing: Downloads depth model (~500MB)
+6. On first image processing: Downloads depth model (~1.3GB)
 7. Total first run: 5-15 minutes (depending on internet speed)
 8. Subsequent runs: Instant launch!
 
@@ -188,7 +188,7 @@ No registry changes, no system files modified!
 TECHNICAL DETAILS
 ================================================================================
 
-AI Model: depth-anything-small-hf (HuggingFace)
+AI Model: Depth Anything V2 Large (HuggingFace)
   - State-of-the-art monocular depth estimation
   - Trained on millions of images
   - No GPU required (CPU version)

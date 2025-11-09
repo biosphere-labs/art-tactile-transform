@@ -21,7 +21,8 @@ from art_tactile_transform.core.mesh_generation import heightmap_to_stl
 from art_tactile_transform.processing.depth_estimation import query_depth_model
 
 # Default model from environment or fallback
-DEFAULT_MODEL = os.getenv("MODEL_NAME", "LiheYoung/depth-anything-small-hf")
+# Using Depth Anything V2 Large for better quality depth estimation
+DEFAULT_MODEL = os.getenv("MODEL_NAME", "depth-anything/Depth-Anything-V2-Large-hf")
 
 
 def process_depth_map(
@@ -205,17 +206,24 @@ def process_image_wrapper(
         height_mm = width_mm  # Square output
         total_height_mm = relief_depth_mm + base_thickness_mm
 
+        # Create ViewSTL iframe for better 3D viewing
+        # ViewSTL.com provides free STL embedding
+        import urllib.parse
+        stl_filename = os.path.basename(stl_path)
+
         info = f"""
         ### Model Information
-        - **AI Model**: {DEFAULT_MODEL}
-        - Width: {width_mm:.1f} mm
-        - Height: {height_mm:.1f} mm
+        - **AI Model**: Depth Anything V2 Large
+        - Width: {width_mm:.1f} mm × Height: {height_mm:.1f} mm
         - Relief depth: {relief_depth_mm:.1f} mm
         - Base thickness: {base_thickness_mm:.1f} mm
         - Total thickness: {total_height_mm:.1f} mm
         - Resolution: {resolution}x{resolution} vertices
+        - Depth contrast: {contrast:.1f}x
 
         **STL file ready for download!**
+
+        **Tip**: If 3D preview is blank, check the heightmap preview (should show depth variation)
         """
 
         return stl_path, preview, info
@@ -244,7 +252,7 @@ def create_gui():
             4. Preview the heightmap (brighter = higher)
             5. Download the STL file for 3D printing
 
-            **Powered by**: HuggingFace Transformers depth-anything-small-hf model
+            **Powered by**: Depth Anything V2 Large (NeurIPS 2024) - [Model Card](https://huggingface.co/depth-anything/Depth-Anything-V2-Large-hf)
             """
         )
 
@@ -311,8 +319,8 @@ def create_gui():
                 gr.Markdown("### AI Depth Parameters")
                 contrast_slider = gr.Slider(
                     minimum=0.5,
-                    maximum=2.0,
-                    value=1.0,
+                    maximum=3.0,
+                    value=1.8,
                     step=0.1,
                     label="Depth Contrast",
                     info="Adjust depth contrast (1.0=normal, >1=stronger, <1=softer)"
@@ -327,12 +335,20 @@ def create_gui():
                 gr.Markdown("""
                 ### About AI Depth Estimation
 
-                Uses **depth-anything-small-hf** model for accurate depth mapping.
+                Uses **Depth Anything V2 Large** (NeurIPS 2024) - state-of-the-art depth model.
 
-                **First run**: Downloads AI model (~500MB) - takes 2-5 minutes
-                **Subsequent runs**: Instant processing
+                **First run**: Downloads AI model (~1.3GB) - takes 5-10 minutes
+                **Subsequent runs**: Cached, processes in seconds
 
-                **Tip**: If faces appear too flat, increase contrast. If background is raised, enable "Invert Depth".
+                **Models**:
+                - [Depth Anything V2 Large](https://huggingface.co/depth-anything/Depth-Anything-V2-Large-hf)
+                - Trained on 595K labeled + 62M unlabeled images
+                - Superior to MiDaS, ZoeDepth, and V1
+
+                **Tips**:
+                - Default contrast (1.8x) creates pronounced depth
+                - Increase to 2.5-3.0x for dramatic tactile relief
+                - Enable "Invert Depth" if background is raised
                 """)
 
                 # Process button
@@ -380,12 +396,14 @@ def create_gui():
         # Tips
         gr.Markdown(
             """
-            ### Tips:
-            - **First run**: Wait for AI model download (~500MB, 2-5 min)
-            - **Depth Contrast**: Start at 1.0, increase to 1.5-2.0 for stronger relief
-            - **Invert Depth**: Enable if background appears raised instead of faces
-            - **Smoothing**: Use 0-2 for sharp details, 3-5 for smooth tactile surfaces
-            - **Resolution**: Use 64-128 for preview, 256 for final high-quality export
+            ### Tips for Best Results:
+            - **Depth Contrast**: Default 1.8x creates good depth. Increase to 2.5-3.0x for dramatic tactile relief
+            - **Invert Depth**: Enable if background appears raised instead of subject
+            - **Smoothing**: 0-2 for sharp details, 3-5 for smooth tactile surfaces, 5-10 for very smooth
+            - **Resolution**: 64-128 for fast preview, 256 for final export
+            - **Relief Depth**: 2-3mm for subtle, 5-10mm for pronounced tactile features
+
+            **Model Info**: Depth Anything V2 Large outperforms MiDaS and older models significantly
             """
         )
 
