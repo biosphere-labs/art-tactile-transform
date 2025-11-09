@@ -121,8 +121,10 @@ def process_image_to_stl(
     pil_image = Image.fromarray(image_rgb)
 
     # Run AI depth estimation
-    print(f"Running AI depth estimation with {model_name}...")
+    print(f"\n[GUI] Running AI depth estimation with {model_name}...")
+    print(f"[GUI] Image size: {pil_image.size}")
     depth_image = query_depth_model(pil_image, model_name)
+    print(f"[GUI] Depth estimation complete. Depth map size: {depth_image.size}")
 
     # Process depth map
     heightmap = process_depth_map(
@@ -395,11 +397,23 @@ def main():
     Main entry point for the GUI application.
     """
     demo = create_gui()
+    print("\n" + "="*60)
+    print("Launching Gradio GUI...")
+    print("="*60)
+    print("Access the GUI at: http://localhost:7860")
+    print("\nIf the 3D preview appears blank:")
+    print("  1. Wait 5-10 seconds for the viewer to load")
+    print("  2. Try a different browser (Chrome recommended)")
+    print("  3. Check the heightmap preview (should show depth)")
+    print("  4. Download the STL and view in a 3D viewer")
+    print("="*60 + "\n")
+
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
-        show_error=True
+        show_error=True,
+        debug=True  # Enable debug mode for better error messages
     )
 
 
