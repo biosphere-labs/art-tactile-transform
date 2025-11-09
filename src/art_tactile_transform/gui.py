@@ -17,7 +17,7 @@ import gradio as gr
 import numpy as np
 from PIL import Image, ImageFilter
 
-from art_tactile_transform.main import heightmap_to_stl
+from art_tactile_transform.core.mesh_generation import heightmap_to_stl
 from art_tactile_transform.processing.depth_estimation import query_depth_model
 
 # Default model from environment or fallback

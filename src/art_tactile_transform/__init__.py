@@ -13,7 +13,6 @@ from .core.validation import validate_mesh
 
 # Processing pipelines
 from .processing.depth_estimation import query_depth_model
-from .processing.semantic_mapping import semantic_height_mapping
 
 # Parameter models
 from .models.parameters import (
@@ -50,7 +49,6 @@ __all__ = [
     "validate_mesh",
     # Processing
     "query_depth_model",
-    "semantic_height_mapping",
     # Parameters
     "PhysicalParams",
     "ProcessingParams",
