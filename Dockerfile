@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install UV package manager
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:$PATH"
+ENV PATH="/root/.local/bin:$PATH"
 
 # Copy project files
 COPY pyproject.toml ./
@@ -28,9 +28,8 @@ COPY README.md ./
 # Note: Using opencv-python instead of opencv-python-headless for full compatibility
 RUN uv pip install --system -e .
 
-# Download model cache (optional - speeds up first run)
-# Uncomment to pre-download the depth estimation model
-# RUN python -c "from transformers import pipeline; pipeline('depth-estimation', model='LiheYoung/depth-anything-small-hf')"
+# Pre-download model cache - bakes model into image so users don't need HuggingFace account
+RUN python -c "from transformers import pipeline; pipeline('depth-estimation', model='LiheYoung/depth-anything-small-hf')"
 
 # Expose Gradio port
 EXPOSE 7860

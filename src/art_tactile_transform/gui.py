@@ -1,13 +1,13 @@
 """
-Gradio GUI for Tactile Art Transform - Phase 1 MVP
+Gradio GUI for Tactile Art Transform - AI Depth Estimation
 
 This module provides a web-based interface for converting images into 3D printable
-tactile representations using semantic height mapping with portrait mode emphasis.
+tactile representations using AI-powered depth estimation.
 
-Key innovation: Faces and features are RAISED, backgrounds are LOWERED
-(opposite of photographic depth estimation)
+Uses HuggingFace transformers for state-of-the-art depth mapping.
 """
 
+import os
 import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
@@ -16,233 +16,122 @@ import cv2
 import gradio as gr
 import numpy as np
 from PIL import Image, ImageFilter
-from scipy.ndimage import gaussian_filter
 
 from art_tactile_transform.main import heightmap_to_stl
+from art_tactile_transform.processing.depth_estimation import query_depth_model
 
-# Download Haar Cascade for face detection (included with OpenCV)
-FACE_CASCADE = cv2.CascadeClassifier(
-    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-)
-EYE_CASCADE = cv2.CascadeClassifier(
-    cv2.data.haarcascades + 'haarcascade_eye.xml'
-)
+# Default model from environment or fallback
+DEFAULT_MODEL = os.getenv("MODEL_NAME", "LiheYoung/depth-anything-small-hf")
 
 
-def detect_faces_and_features(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Detect faces and facial features using OpenCV Haar Cascades.
-
-    Returns:
-        Tuple of (face_mask, feature_mask) where masks are normalized 0-1
-    """
-    # Convert to grayscale for detection
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    h, w = image.shape[:2]
-
-    # Create masks
-    face_mask = np.zeros((h, w), dtype=np.float32)
-    feature_mask = np.zeros((h, w), dtype=np.float32)
-
-    # Detect faces
-    faces = FACE_CASCADE.detectMultiScale(
-        gray,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(30, 30)
-    )
-
-    for (x, y, fw, fh) in faces:
-        # Create face region mask with gradient falloff
-        face_region = np.zeros((h, w), dtype=np.float32)
-
-        # Create elliptical mask for more natural face shape
-        center_x = x + fw // 2
-        center_y = y + fh // 2
-
-        # Create coordinate grids
-        y_coords, x_coords = np.ogrid[:h, :w]
-
-        # Elliptical distance
-        ellipse_dist = (
-            ((x_coords - center_x) / (fw * 0.6))**2 +
-            ((y_coords - center_y) / (fh * 0.6))**2
-        )
-
-        # Create smooth falloff
-        face_region = np.exp(-ellipse_dist)
-        face_region = np.clip(face_region, 0, 1)
-
-        # Accumulate face regions
-        face_mask = np.maximum(face_mask, face_region)
-
-        # Detect eyes within face region
-        roi_gray = gray[y:y+fh, x:x+fw]
-        eyes = EYE_CASCADE.detectMultiScale(
-            roi_gray,
-            scaleFactor=1.1,
-            minNeighbors=3,
-            minSize=(15, 15)
-        )
-
-        for (ex, ey, ew, eh) in eyes:
-            # Convert to full image coordinates
-            eye_x = x + ex + ew // 2
-            eye_y = y + ey + eh // 2
-
-            # Create circular region around eye
-            y_coords, x_coords = np.ogrid[:h, :w]
-            dist = np.sqrt((x_coords - eye_x)**2 + (y_coords - eye_y)**2)
-            eye_region = np.exp(-dist**2 / (2 * (ew * 0.6)**2))
-            feature_mask = np.maximum(feature_mask, eye_region)
-
-        # Add nose region (approximate center-bottom of face)
-        nose_x = center_x
-        nose_y = center_y + int(fh * 0.15)
-        y_coords, x_coords = np.ogrid[:h, :w]
-        dist = np.sqrt((x_coords - nose_x)**2 + (y_coords - nose_y)**2)
-        nose_region = np.exp(-dist**2 / (2 * (fw * 0.15)**2))
-        feature_mask = np.maximum(feature_mask, nose_region)
-
-        # Add mouth region (approximate bottom of face)
-        mouth_x = center_x
-        mouth_y = center_y + int(fh * 0.35)
-        dist = np.sqrt((x_coords - mouth_x)**2 + (y_coords - mouth_y)**2)
-        mouth_region = np.exp(-dist**2 / (2 * (fw * 0.2)**2))
-        feature_mask = np.maximum(feature_mask, mouth_region)
-
-    # Normalize masks
-    if face_mask.max() > 0:
-        face_mask = face_mask / face_mask.max()
-    if feature_mask.max() > 0:
-        feature_mask = feature_mask / feature_mask.max()
-
-    return face_mask, feature_mask
-
-
-def create_edge_mask(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
-    """
-    Create edge detection mask for feature enhancement.
-
-    Args:
-        image: Input image as numpy array
-        strength: Edge strength multiplier (0-2)
-
-    Returns:
-        Edge mask normalized 0-1
-    """
-    # Convert to grayscale if needed
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-
-    # Apply Canny edge detection
-    edges = cv2.Canny(gray, 50, 150)
-
-    # Dilate edges slightly for better visibility
-    kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
-
-    # Normalize and apply strength
-    edge_mask = edges.astype(np.float32) / 255.0
-    edge_mask = edge_mask * strength
-
-    # Smooth edges
-    edge_mask = gaussian_filter(edge_mask, sigma=1.0)
-
-    return edge_mask
-
-
-def create_semantic_heightmap(
-    image: np.ndarray,
-    subject_emphasis: float = 120.0,
-    background_suppression: float = 40.0,
-    feature_sharpness: float = 70.0,
-    edge_strength: float = 60.0,
-    smoothing: float = 2.0
+def process_depth_map(
+    depth_image: Image.Image,
+    smoothing: float = 2.0,
+    contrast: float = 1.0,
+    invert: bool = False,
+    clamp_min: int = 0,
+    clamp_max: int = 255
 ) -> np.ndarray:
     """
-    Create semantic heightmap where faces are HIGH and background is LOW.
-
-    This is the key innovation: height represents IMPORTANCE, not photographic depth.
+    Process AI-generated depth map into heightmap.
 
     Args:
-        image: Input image as numpy array (BGR format)
-        subject_emphasis: How much to raise main subject (0-200%)
-        background_suppression: How much to flatten background (0-100%)
-        feature_sharpness: Edge vs smooth transitions (0-100%)
-        edge_strength: Edge detection intensity (0-100%)
-        smoothing: Gaussian blur radius for smoothing
+        depth_image: Depth map from AI model (PIL Image)
+        smoothing: Gaussian blur radius (0-10)
+        contrast: Contrast adjustment (0.5-2.0)
+        invert: Invert depth values (far becomes near)
+        clamp_min: Minimum value clamp (0-255)
+        clamp_max: Maximum value clamp (0-255)
 
     Returns:
-        Heightmap normalized to 0-1 range
+        Heightmap as numpy array normalized 0-1
     """
-    h, w = image.shape[:2]
+    # Convert to grayscale if needed
+    if depth_image.mode != 'L':
+        depth_image = depth_image.convert('L')
 
-    # Detect faces and features
-    face_mask, feature_mask = detect_faces_and_features(image)
+    # Convert to numpy array
+    depth_array = np.array(depth_image, dtype=np.float32)
 
-    # Create edge mask
-    edge_mask = create_edge_mask(image, edge_strength / 100.0)
+    # Apply clamping
+    depth_array = np.clip(depth_array, clamp_min, clamp_max)
 
-    # Initialize heightmap with base level
-    heightmap = np.ones((h, w), dtype=np.float32) * 0.3  # Base background height
+    # Normalize to 0-1
+    if clamp_max > clamp_min:
+        depth_array = (depth_array - clamp_min) / (clamp_max - clamp_min)
 
-    # Apply background suppression (lower the non-face areas)
-    background_level = (100.0 - background_suppression) / 100.0 * 0.3
-    heightmap = heightmap * (1.0 - face_mask) * background_level + heightmap * face_mask
+    # Apply contrast adjustment
+    if contrast != 1.0:
+        # Adjust around midpoint (0.5)
+        depth_array = ((depth_array - 0.5) * contrast) + 0.5
+        depth_array = np.clip(depth_array, 0, 1)
 
-    # Add face regions (raise faces)
-    face_height = subject_emphasis / 100.0
-    heightmap += face_mask * face_height
-
-    # Add feature emphasis (raise facial features even more)
-    feature_height = (feature_sharpness / 100.0) * 0.3
-    heightmap += feature_mask * feature_height
-
-    # Add edge enhancement
-    edge_height = (edge_strength / 100.0) * 0.2
-    heightmap += edge_mask * edge_height
+    # Invert if requested
+    if invert:
+        depth_array = 1.0 - depth_array
 
     # Apply smoothing
     if smoothing > 0:
-        heightmap = gaussian_filter(heightmap, sigma=smoothing)
+        from scipy.ndimage import gaussian_filter
+        depth_array = gaussian_filter(depth_array, sigma=smoothing)
 
-    # Normalize to 0-1 range
-    heightmap = np.clip(heightmap, 0, None)
-    if heightmap.max() > 0:
-        heightmap = heightmap / heightmap.max()
+    # Final normalization
+    if depth_array.max() > 0:
+        depth_array = depth_array / depth_array.max()
 
-    return heightmap
+    return depth_array
 
 
-def process_portrait_to_stl(
+def process_image_to_stl(
     image: np.ndarray,
     width_mm: float = 150.0,
     relief_depth_mm: float = 3.0,
     base_thickness_mm: float = 2.0,
     smoothing: float = 2.0,
-    subject_emphasis: float = 120.0,
-    background_suppression: float = 40.0,
-    feature_sharpness: float = 70.0,
-    edge_strength: float = 60.0,
-    resolution: int = 128
+    contrast: float = 1.0,
+    invert_depth: bool = False,
+    resolution: int = 128,
+    model_name: str = DEFAULT_MODEL
 ) -> Tuple[str, Image.Image]:
     """
-    Process image and generate STL file with preview.
+    Process image using AI depth estimation and generate STL file.
+
+    Args:
+        image: Input image as numpy array (BGR or RGB)
+        width_mm: Physical width in millimeters
+        relief_depth_mm: Maximum relief height
+        base_thickness_mm: Base plate thickness
+        smoothing: Gaussian blur radius (0-10)
+        contrast: Depth contrast adjustment (0.5-2.0)
+        invert_depth: Invert depth (far becomes near)
+        resolution: Mesh resolution (vertices per side)
+        model_name: HuggingFace model to use
 
     Returns:
         Tuple of (stl_path, preview_image)
     """
-    # Create semantic heightmap
-    heightmap = create_semantic_heightmap(
-        image,
-        subject_emphasis=subject_emphasis,
-        background_suppression=background_suppression,
-        feature_sharpness=feature_sharpness,
-        edge_strength=edge_strength,
-        smoothing=smoothing
+    # Convert numpy array to PIL Image
+    if image.shape[2] == 4:  # RGBA
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
+    elif image.shape[2] == 3:  # BGR or RGB
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    else:
+        image_rgb = image
+
+    pil_image = Image.fromarray(image_rgb)
+
+    # Run AI depth estimation
+    print(f"Running AI depth estimation with {model_name}...")
+    depth_image = query_depth_model(pil_image, model_name)
+
+    # Process depth map
+    heightmap = process_depth_map(
+        depth_image,
+        smoothing=smoothing,
+        contrast=contrast,
+        invert=invert_depth,
+        clamp_min=0,
+        clamp_max=255
     )
 
     # Resize heightmap to target resolution
@@ -283,14 +172,12 @@ def process_image_wrapper(
     relief_depth_mm,
     base_thickness_mm,
     smoothing,
-    subject_emphasis,
-    background_suppression,
-    feature_sharpness,
-    edge_strength,
+    contrast,
+    invert_depth,
     resolution
 ):
     """
-    Wrapper for Gradio interface.
+    Wrapper for Gradio interface with AI depth estimation.
     """
     if image is None:
         return None, None, "Please upload an image first."
@@ -299,21 +186,17 @@ def process_image_wrapper(
         # Convert PIL Image to numpy array (Gradio provides PIL Image)
         image_array = np.array(image)
 
-        # Convert RGB to BGR for OpenCV
-        image_bgr = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
-
-        # Process image
-        stl_path, preview = process_portrait_to_stl(
-            image_bgr,
+        # Process image with AI depth estimation
+        stl_path, preview = process_image_to_stl(
+            image_array,
             width_mm=width_mm,
             relief_depth_mm=relief_depth_mm,
             base_thickness_mm=base_thickness_mm,
             smoothing=smoothing,
-            subject_emphasis=subject_emphasis,
-            background_suppression=background_suppression,
-            feature_sharpness=feature_sharpness,
-            edge_strength=edge_strength,
-            resolution=int(resolution)
+            contrast=contrast,
+            invert_depth=invert_depth,
+            resolution=int(resolution),
+            model_name=DEFAULT_MODEL
         )
 
         # Calculate approximate dimensions
@@ -322,6 +205,7 @@ def process_image_wrapper(
 
         info = f"""
         ### Model Information
+        - **AI Model**: {DEFAULT_MODEL}
         - Width: {width_mm:.1f} mm
         - Height: {height_mm:.1f} mm
         - Relief depth: {relief_depth_mm:.1f} mm
@@ -335,28 +219,30 @@ def process_image_wrapper(
         return stl_path, preview, info
 
     except Exception as e:
-        return None, None, f"Error processing image: {str(e)}"
+        import traceback
+        error_details = traceback.format_exc()
+        return None, None, f"Error processing image:\n\n{str(e)}\n\n{error_details}"
 
 
 def create_gui():
     """
     Create and configure the Gradio interface.
     """
-    with gr.Blocks(title="Tactile Art Transform - Portrait Mode") as demo:
+    with gr.Blocks(title="Tactile Art Transform - AI Depth Estimation") as demo:
         gr.Markdown(
             """
-            # Tactile Art Transform - Portrait Mode
+            # Tactile Art Transform - AI Depth Estimation
 
-            Convert portraits into 3D printable tactile representations where **faces are raised**
-            and **backgrounds are lowered** - optimized for touch perception.
+            Convert images into 3D printable tactile representations using state-of-the-art AI.
 
             ### How it works:
-            1. Upload a portrait image (faces will be detected automatically)
-            2. Adjust parameters to control the tactile representation
-            3. Preview the heightmap (brighter = higher)
-            4. Download the STL file for 3D printing
+            1. Upload any image (portraits, landscapes, objects, etc.)
+            2. AI analyzes the image and generates depth map automatically
+            3. Adjust contrast and smoothing to fine-tune the relief
+            4. Preview the heightmap (brighter = higher)
+            5. Download the STL file for 3D printing
 
-            **Key Innovation**: Height represents semantic importance, not photographic depth!
+            **Powered by**: HuggingFace Transformers depth-anything-small-hf model
             """
         )
 
@@ -364,7 +250,7 @@ def create_gui():
             with gr.Column(scale=1):
                 # Image upload
                 image_input = gr.Image(
-                    label="Upload Portrait Image",
+                    label="Upload Image",
                     type="pil",
                     height=400
                 )
@@ -419,47 +305,37 @@ def create_gui():
                 )
 
             with gr.Column(scale=1):
-                # Semantic parameters
-                gr.Markdown("### Semantic Parameters")
-                subject_emphasis_slider = gr.Slider(
-                    minimum=0,
-                    maximum=200,
-                    value=120,
-                    step=10,
-                    label="Subject Emphasis (%)",
-                    info="How much to raise faces (higher=more pronounced)"
+                # AI Depth Parameters
+                gr.Markdown("### AI Depth Parameters")
+                contrast_slider = gr.Slider(
+                    minimum=0.5,
+                    maximum=2.0,
+                    value=1.0,
+                    step=0.1,
+                    label="Depth Contrast",
+                    info="Adjust depth contrast (1.0=normal, >1=stronger, <1=softer)"
                 )
 
-                background_suppression_slider = gr.Slider(
-                    minimum=0,
-                    maximum=100,
-                    value=40,
-                    step=5,
-                    label="Background Suppression (%)",
-                    info="How much to flatten background (higher=flatter)"
+                invert_depth_checkbox = gr.Checkbox(
+                    label="Invert Depth",
+                    value=False,
+                    info="Swap near/far (try if background is raised)"
                 )
 
-                feature_sharpness_slider = gr.Slider(
-                    minimum=0,
-                    maximum=100,
-                    value=70,
-                    step=5,
-                    label="Feature Sharpness (%)",
-                    info="Emphasis on facial features (eyes, nose, mouth)"
-                )
+                gr.Markdown("""
+                ### About AI Depth Estimation
 
-                edge_strength_slider = gr.Slider(
-                    minimum=0,
-                    maximum=100,
-                    value=60,
-                    step=5,
-                    label="Edge Strength (%)",
-                    info="Edge detection intensity for boundaries"
-                )
+                Uses **depth-anything-small-hf** model for accurate depth mapping.
+
+                **First run**: Downloads AI model (~500MB) - takes 2-5 minutes
+                **Subsequent runs**: Instant processing
+
+                **Tip**: If faces appear too flat, increase contrast. If background is raised, enable "Invert Depth".
+                """)
 
                 # Process button
                 process_btn = gr.Button(
-                    "Generate 3D Model",
+                    "Generate 3D Model with AI",
                     variant="primary",
                     size="lg"
                 )
@@ -492,23 +368,22 @@ def create_gui():
                 relief_depth_slider,
                 base_thickness_slider,
                 smoothing_slider,
-                subject_emphasis_slider,
-                background_suppression_slider,
-                feature_sharpness_slider,
-                edge_strength_slider,
+                contrast_slider,
+                invert_depth_checkbox,
                 resolution_slider
             ],
             outputs=[model_output, preview_output, info_output]
         )
 
-        # Example
+        # Tips
         gr.Markdown(
             """
             ### Tips:
-            - **For portraits**: Keep subject emphasis high (100-150%) and background suppression moderate (30-50%)
-            - **For detailed faces**: Increase feature sharpness and edge strength
-            - **For smooth results**: Increase smoothing value
-            - **For faster preview**: Use lower resolution (64-128), increase for final export
+            - **First run**: Wait for AI model download (~500MB, 2-5 min)
+            - **Depth Contrast**: Start at 1.0, increase to 1.5-2.0 for stronger relief
+            - **Invert Depth**: Enable if background appears raised instead of faces
+            - **Smoothing**: Use 0-2 for sharp details, 3-5 for smooth tactile surfaces
+            - **Resolution**: Use 64-128 for preview, 256 for final high-quality export
             """
         )
 

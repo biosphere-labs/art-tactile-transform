@@ -1,0 +1,19 @@
+# Art Tactile Transform - Core Dependencies (Windows)
+# Install these first (fast, ~100MB total)
+
+# Core Python packages
+numpy>=2.0.0
+pillow>=10.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+scipy>=1.11.0
+
+# GUI framework
+gradio>=4.0.0
+
+# Image processing
+opencv-python>=4.8.0
+scikit-image>=0.21.0
+
+# Note: PyTorch and transformers are installed separately via requirements-pytorch.txt
+# to reduce initial download size and allow on-demand installation
