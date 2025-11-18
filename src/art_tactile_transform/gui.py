@@ -7,10 +7,12 @@ tactile representations using AI-powered depth estimation.
 Uses HuggingFace transformers for state-of-the-art depth mapping.
 """
 
+import base64
 import os
 import tempfile
+import textwrap
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 import cv2
 import gradio as gr
@@ -169,6 +171,117 @@ def process_image_to_stl(
     return stl_path, preview_image
 
 
+def _build_stl_viewer_html(stl_path: str) -> str:
+    """Create an embeddable HTML viewer for STL data using three.js."""
+    with open(stl_path, "rb") as stl_file:
+        stl_bytes = stl_file.read()
+
+    stl_b64 = base64.b64encode(stl_bytes).decode("utf-8")
+
+    # The wrapper div is the previous sibling of the script tag, so we can safely
+    # reference it from within the script without needing global identifiers.
+    return textwrap.dedent(
+        f"""
+        <div class="stl-viewer-wrapper" style="display:flex;flex-direction:column;gap:10px;font-family:Inter,system-ui,Segoe UI,Helvetica,Arial,sans-serif;color:#eaeaea;">
+            <div class="stl-viewer-canvas" style="height:440px;border-radius:12px;border:1px solid #2f2f2f;background:radial-gradient(circle at 20% 20%, #222 0%, #111 45%, #0b0b0b 100%);overflow:hidden;position:relative;"></div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px;opacity:0.9;">
+                <strong>Interactive 3D preview</strong>
+                <span style="opacity:0.8;">Pan with left click, zoom with scroll, rotate with right click.</span>
+                <a data-role="download-stl" style="padding:6px 10px;border-radius:8px;background:#2a6df4;color:#fff;text-decoration:none;font-weight:600;">Download STL</a>
+            </div>
+        </div>
+        <script type="module">
+            import * as THREE from "https://unpkg.com/three@0.165.0/build/three.module.js";
+            import { OrbitControls } from "https://unpkg.com/three@0.165.0/examples/jsm/controls/OrbitControls.js";
+            import { STLLoader } from "https://unpkg.com/three@0.165.0/examples/jsm/loaders/STLLoader.js";
+
+            const wrapper = document.currentScript.previousElementSibling;
+            const container = wrapper.querySelector('.stl-viewer-canvas');
+            const downloadLink = wrapper.querySelector('a[data-role="download-stl"]');
+
+            const downloadUrl = 'data:application/sla;base64,{stl_b64}';
+            downloadLink.href = downloadUrl;
+            downloadLink.download = 'tactile-relief.stl';
+
+            // Convert base64 STL to a blob for the loader
+            const binary = atob('{stl_b64}');
+            const buffer = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {{
+                buffer[i] = binary.charCodeAt(i);
+            }}
+            const blob = new Blob([buffer], {{ type: 'application/sla' }});
+            const url = URL.createObjectURL(blob);
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0b0b);
+
+            const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+            camera.position.set(1.5, 1.5, 1.5);
+
+            const renderer = new THREE.WebGLRenderer({{ antialias: true }});
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.innerHTML = '';
+            container.appendChild(renderer.domElement);
+
+            const light = new THREE.HemisphereLight(0xffffff, 0x111111, 1.2);
+            scene.add(light);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(2, 4, 2);
+            scene.add(dirLight);
+
+            const loader = new STLLoader();
+            loader.load(url, (geometry) => {{
+                geometry.computeBoundingBox();
+                geometry.computeVertexNormals();
+
+                const material = new THREE.MeshStandardMaterial({{
+                    color: 0x5a9bff,
+                    roughness: 0.35,
+                    metalness: 0.15,
+                    flatShading: false,
+                }});
+
+                const mesh = new THREE.Mesh(geometry, material);
+                scene.add(mesh);
+
+                const bbox = geometry.boundingBox;
+                const size = new THREE.Vector3();
+                bbox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 1.4 / maxDim;
+                mesh.scale.setScalar(scale);
+                bbox.getCenter(mesh.position).multiplyScalar(-1 * scale);
+
+                const controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.screenSpacePanning = false;
+                controls.target.set(0, 0, 0);
+
+                camera.position.set(2, 1.2, 2);
+                camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+                const animate = () => {{
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }};
+                animate();
+            }});
+
+            const resizeObserver = new ResizeObserver(() => {{
+                const rect = container.getBoundingClientRect();
+                camera.aspect = rect.width / rect.height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(rect.width, rect.height);
+            }});
+            resizeObserver.observe(container);
+        </script>
+        """
+    )
+
+
 def process_image_wrapper(
     image,
     width_mm,
@@ -206,10 +319,7 @@ def process_image_wrapper(
         height_mm = width_mm  # Square output
         total_height_mm = relief_depth_mm + base_thickness_mm
 
-        # Create ViewSTL iframe for better 3D viewing
-        # ViewSTL.com provides free STL embedding
-        import urllib.parse
-        stl_filename = os.path.basename(stl_path)
+        viewer_html = _build_stl_viewer_html(stl_path)
 
         info = f"""
         ### Model Information
@@ -226,12 +336,12 @@ def process_image_wrapper(
         **Tip**: If 3D preview is blank, check the heightmap preview (should show depth variation)
         """
 
-        return stl_path, preview, info
+        return viewer_html, preview, stl_path, info
 
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        return None, None, f"Error processing image:\n\n{str(e)}\n\n{error_details}"
+        return None, None, None, f"Error processing image:\n\n{str(e)}\n\n{error_details}"
 
 
 def create_gui():
@@ -367,14 +477,13 @@ def create_gui():
                 )
 
             with gr.Column(scale=1):
-                # 3D Model output
-                model_output = gr.Model3D(
-                    label="3D Preview",
-                    clear_color=[0.2, 0.2, 0.2, 1.0],
-                    height=400
+                viewer_output = gr.HTML(
+                    label="Interactive 3D Preview",
+                    show_label=False
                 )
 
-        # Info output
+        # Download + Info output
+        stl_file_output = gr.File(label="Download STL")
         info_output = gr.Markdown()
 
         # Connect processing function
@@ -390,7 +499,7 @@ def create_gui():
                 invert_depth_checkbox,
                 resolution_slider
             ],
-            outputs=[model_output, preview_output, info_output]
+            outputs=[viewer_output, preview_output, stl_file_output, info_output]
         )
 
         # Tips
