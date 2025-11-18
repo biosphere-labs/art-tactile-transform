@@ -18,6 +18,9 @@ Automatically starts the container and opens your browser to the GUI.
 
 See [LAUNCHER.md](LAUNCHER.md) for details.
 
+### New to This? Read the Non-Technical Guide
+If you want a plain-language, step-by-step walkthrough (including what each slider changes and what to do when things look off), see [docs/non_technical_run_guide.md](docs/non_technical_run_guide.md).
+
 ### Option 2: Run Locally
 
 ```bash
