@@ -11,6 +11,7 @@ import base64
 import os
 import tempfile
 import textwrap
+from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 
@@ -149,10 +150,12 @@ def process_image_to_stl(
     # Calculate pixel scale to achieve target width
     pixel_scale_mm = width_mm / resolution
 
-    # Generate STL file
+    # Generate STL file with datetime
     temp_dir = Path(tempfile.gettempdir()) / "tactile_art"
     temp_dir.mkdir(exist_ok=True)
-    stl_path = str(temp_dir / "output.stl")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stl_filename = f"tactile_relief_{timestamp}.stl"
+    stl_path = str(temp_dir / stl_filename)
 
     heightmap_to_stl(
         heightmap_resized,
@@ -192,8 +195,8 @@ def _build_stl_viewer_html(stl_path: str) -> str:
         </div>
         <script type="module">
             import * as THREE from "https://unpkg.com/three@0.165.0/build/three.module.js";
-            import { OrbitControls } from "https://unpkg.com/three@0.165.0/examples/jsm/controls/OrbitControls.js";
-            import { STLLoader } from "https://unpkg.com/three@0.165.0/examples/jsm/loaders/STLLoader.js";
+            import {{ OrbitControls }} from "https://unpkg.com/three@0.165.0/examples/jsm/controls/OrbitControls.js";
+            import {{ STLLoader }} from "https://unpkg.com/three@0.165.0/examples/jsm/loaders/STLLoader.js";
 
             const wrapper = document.currentScript.previousElementSibling;
             const container = wrapper.querySelector('.stl-viewer-canvas');
@@ -319,8 +322,6 @@ def process_image_wrapper(
         height_mm = width_mm  # Square output
         total_height_mm = relief_depth_mm + base_thickness_mm
 
-        viewer_html = _build_stl_viewer_html(stl_path)
-
         info = f"""
         ### Model Information
         - **AI Model**: Depth Anything V2 Large
@@ -333,15 +334,15 @@ def process_image_wrapper(
 
         **STL file ready for download!**
 
-        **Tip**: If 3D preview is blank, check the heightmap preview (should show depth variation)
+        **Tip**: Check the heightmap preview (should show depth variation)
         """
 
-        return viewer_html, preview, stl_path, info
+        return preview, stl_path, info
 
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        return None, None, None, f"Error processing image:\n\n{str(e)}\n\n{error_details}"
+        return None, None, f"Error processing image:\n\n{str(e)}\n\n{error_details}"
 
 
 def create_gui():
@@ -379,17 +380,17 @@ def create_gui():
                 gr.Markdown("### Physical Parameters")
                 width_slider = gr.Slider(
                     minimum=50,
-                    maximum=300,
-                    value=150,
-                    step=5,
+                    maximum=1000,
+                    value=300,
+                    step=10,
                     label="Width (mm)",
                     info="Physical width of the model"
                 )
 
                 relief_depth_slider = gr.Slider(
                     minimum=0.5,
-                    maximum=10,
-                    value=3,
+                    maximum=50,
+                    value=10,
                     step=0.5,
                     label="Relief Depth (mm)",
                     info="Maximum height of raised features"
@@ -397,8 +398,8 @@ def create_gui():
 
                 base_thickness_slider = gr.Slider(
                     minimum=0.5,
-                    maximum=5,
-                    value=2,
+                    maximum=20,
+                    value=5,
                     step=0.5,
                     label="Base Thickness (mm)",
                     info="Thickness of the base plate"
@@ -408,20 +409,20 @@ def create_gui():
                 gr.Markdown("### Processing Parameters")
                 smoothing_slider = gr.Slider(
                     minimum=0,
-                    maximum=10,
-                    value=2,
+                    maximum=20,
+                    value=0,
                     step=0.5,
                     label="Smoothing",
-                    info="Gaussian blur radius (0=sharp, 10=very smooth)"
+                    info="Gaussian blur radius (0=sharp, 20=very smooth)"
                 )
 
                 resolution_slider = gr.Slider(
                     minimum=64,
-                    maximum=256,
-                    value=128,
-                    step=32,
+                    maximum=1024,
+                    value=256,
+                    step=64,
                     label="Resolution",
-                    info="Mesh resolution (higher=more detail, larger file)"
+                    info="Mesh resolution (256=good, 512=high, 1024=extreme detail but huge files)"
                 )
 
             with gr.Column(scale=1):
@@ -429,17 +430,17 @@ def create_gui():
                 gr.Markdown("### AI Depth Parameters")
                 contrast_slider = gr.Slider(
                     minimum=0.5,
-                    maximum=3.0,
-                    value=1.8,
+                    maximum=10.0,
+                    value=3.0,
                     step=0.1,
                     label="Depth Contrast",
-                    info="Adjust depth contrast (1.0=normal, >1=stronger, <1=softer)"
+                    info="Adjust depth contrast (1.0=normal, 3.0=strong, 10.0=extreme)"
                 )
 
                 invert_depth_checkbox = gr.Checkbox(
                     label="Invert Depth",
-                    value=False,
-                    info="Swap near/far (try if background is raised)"
+                    value=True,
+                    info="Swap near/far (default ON for relief to pop out)"
                 )
 
                 gr.Markdown("""
@@ -476,12 +477,6 @@ def create_gui():
                     type="pil"
                 )
 
-            with gr.Column(scale=1):
-                viewer_output = gr.HTML(
-                    label="Interactive 3D Preview",
-                    show_label=False
-                )
-
         # Download + Info output
         stl_file_output = gr.File(label="Download STL")
         info_output = gr.Markdown()
@@ -499,7 +494,7 @@ def create_gui():
                 invert_depth_checkbox,
                 resolution_slider
             ],
-            outputs=[viewer_output, preview_output, stl_file_output, info_output]
+            outputs=[preview_output, stl_file_output, info_output]
         )
 
         # Tips

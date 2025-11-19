@@ -151,7 +151,6 @@ INVERT_HEIGHTS=false
 
 # Model (for depth estimation mode only)
 MODEL_NAME=LiheYoung/depth-anything-small-hf
-HF_API_TOKEN=
 ```
 
 **Note**: IMAGE_PATH and OUTPUT_PATH are not needed - the GUI handles file upload/download dynamically.

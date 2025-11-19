@@ -44,7 +44,6 @@ def generate_3d() -> str:
 
     # Optional parameters with defaults
     resolution = int(os.getenv("RESOLUTION", "64"))
-    api_token = os.getenv("HF_API_TOKEN")
 
     # Enhanced parameters
     min_height_mm = float(os.getenv("MIN_HEIGHT_MM", "0.2"))

@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+import torch
 from PIL import Image
 from transformers import pipeline
 
@@ -26,9 +27,16 @@ def query_depth_model(image: Image.Image, model_name: str) -> Image.Image:
         raise ValueError("Model name cannot be empty")
 
     try:
-        # Initialize depth estimation pipeline
-        print(f"Loading depth model: {model_name}")
-        depth_estimator = pipeline("depth-estimation", model=model_name)
+        # Force CPU usage to avoid GPU memory issues
+        device = "cpu"
+        print(f"Loading depth model: {model_name} (using {device})")
+
+        # Initialize depth estimation pipeline with explicit CPU device
+        depth_estimator = pipeline(
+            "depth-estimation",
+            model=model_name,
+            device=device
+        )
 
         # Run inference
         result = depth_estimator(image)
@@ -37,5 +45,10 @@ def query_depth_model(image: Image.Image, model_name: str) -> Image.Image:
         depth_map = result["depth"]
 
         return depth_map
+    except torch.cuda.OutOfMemoryError as e:
+        raise RuntimeError(
+            f"GPU out of memory. This application is configured to use CPU. "
+            f"Please restart the application to clear GPU memory. Error: {e}"
+        ) from e
     except Exception as e:
         raise RuntimeError(f"Failed to run depth estimation: {e}") from e
