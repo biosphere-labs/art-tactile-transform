@@ -30,22 +30,26 @@ DEFAULT_MODEL = os.getenv("MODEL_NAME", "depth-anything/Depth-Anything-V2-Large-
 
 def process_depth_map(
     depth_image: Image.Image,
+    original_image: Image.Image,
     smoothing: float = 2.0,
     contrast: float = 1.0,
     invert: bool = False,
     clamp_min: int = 0,
-    clamp_max: int = 255
+    clamp_max: int = 255,
+    texture_strength: float = 0.0
 ) -> np.ndarray:
     """
-    Process AI-generated depth map into heightmap.
+    Process AI-generated depth map into heightmap with optional texture enhancement.
 
     Args:
         depth_image: Depth map from AI model (PIL Image)
+        original_image: Original input image for texture detection (PIL Image)
         smoothing: Gaussian blur radius (0-10)
         contrast: Contrast adjustment (0.5-2.0)
         invert: Invert depth values (far becomes near)
         clamp_min: Minimum value clamp (0-255)
         clamp_max: Maximum value clamp (0-255)
+        texture_strength: Strength of texture/edge overlay (0-100)
 
     Returns:
         Heightmap as numpy array normalized 0-1
@@ -69,6 +73,34 @@ def process_depth_map(
         # Adjust around midpoint (0.5)
         depth_array = ((depth_array - 0.5) * contrast) + 0.5
         depth_array = np.clip(depth_array, 0, 1)
+
+    # Add texture/edge enhancement if requested
+    if texture_strength > 0:
+        # Convert original image to grayscale for edge detection
+        if original_image.mode != 'L':
+            gray_image = original_image.convert('L')
+        else:
+            gray_image = original_image
+
+        gray_array = np.array(gray_image, dtype=np.float32)
+
+        # Resize to match depth map size
+        if gray_array.shape != depth_array.shape:
+            from skimage.transform import resize
+            gray_array = resize(gray_array, depth_array.shape, anti_aliasing=True) * 255.0
+
+        # Detect edges using Sobel operator
+        sobel_x = cv2.Sobel(gray_array, cv2.CV_64F, 1, 0, ksize=3)
+        sobel_y = cv2.Sobel(gray_array, cv2.CV_64F, 0, 1, ksize=3)
+        edges = np.sqrt(sobel_x**2 + sobel_y**2)
+
+        # Normalize edges to 0-1
+        if edges.max() > 0:
+            edges = edges / edges.max()
+
+        # Blend edges with depth map (texture_strength controls the mix)
+        blend_factor = texture_strength / 100.0
+        depth_array = depth_array * (1 - blend_factor) + edges * blend_factor
 
     # Invert if requested
     if invert:
@@ -95,6 +127,7 @@ def process_image_to_stl(
     contrast: float = 1.0,
     invert_depth: bool = False,
     resolution: int = 128,
+    texture_strength: float = 0.0,
     model_name: str = DEFAULT_MODEL
 ) -> Tuple[str, Image.Image]:
     """
@@ -109,6 +142,7 @@ def process_image_to_stl(
         contrast: Depth contrast adjustment (0.5-2.0)
         invert_depth: Invert depth (far becomes near)
         resolution: Mesh resolution (vertices per side)
+        texture_strength: Edge/texture enhancement strength (0-100)
         model_name: HuggingFace model to use
 
     Returns:
@@ -130,14 +164,16 @@ def process_image_to_stl(
     depth_image = query_depth_model(pil_image, model_name)
     print(f"[GUI] Depth estimation complete. Depth map size: {depth_image.size}")
 
-    # Process depth map
+    # Process depth map with texture enhancement
     heightmap = process_depth_map(
         depth_image,
+        pil_image,
         smoothing=smoothing,
         contrast=contrast,
         invert=invert_depth,
         clamp_min=0,
-        clamp_max=255
+        clamp_max=255,
+        texture_strength=texture_strength
     )
 
     # Resize heightmap to target resolution
@@ -293,7 +329,8 @@ def process_image_wrapper(
     smoothing,
     contrast,
     invert_depth,
-    resolution
+    resolution,
+    texture_strength
 ):
     """
     Wrapper for Gradio interface with AI depth estimation.
@@ -315,6 +352,7 @@ def process_image_wrapper(
             contrast=contrast,
             invert_depth=invert_depth,
             resolution=int(resolution),
+            texture_strength=texture_strength,
             model_name=DEFAULT_MODEL
         )
 
@@ -425,6 +463,15 @@ def create_gui():
                     info="Mesh resolution (256=good, 512=high, 1024=extreme detail but huge files)"
                 )
 
+                texture_strength_slider = gr.Slider(
+                    minimum=0,
+                    maximum=100,
+                    value=50,
+                    step=5,
+                    label="Texture Enhancement",
+                    info="Adds brush strokes/surface detail (0=none, 50=balanced, 100=max texture)"
+                )
+
             with gr.Column(scale=1):
                 # AI Depth Parameters
                 gr.Markdown("### AI Depth Parameters")
@@ -492,7 +539,8 @@ def create_gui():
                 smoothing_slider,
                 contrast_slider,
                 invert_depth_checkbox,
-                resolution_slider
+                resolution_slider,
+                texture_strength_slider
             ],
             outputs=[preview_output, stl_file_output, info_output]
         )
